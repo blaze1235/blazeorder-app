@@ -1,107 +1,204 @@
 import React, { useState } from 'react';
 import { Supplier, Product, CartItem } from '../types';
 
-interface Props {
+interface ProductListProps {
   supplier: Supplier;
   products: Product[];
   cart: CartItem[];
-  onAddToCart: (p: Product, qty: number) => void;
+  onAddToCart: (product: Product, quantity: number) => void;
   onViewReview: () => void;
   onBack: () => void;
-  t: (k: string) => string;
+  t: (key: string) => string;
 }
 
-const ProductList: React.FC<Props> = ({ supplier, products, cart, onAddToCart, onViewReview, onBack }) => {
-  const [search, setSearch] = useState('');
-  const [activeCategory, setActiveCategory] = useState('All');
+const fmt = (n: number) => n.toLocaleString('uz-UZ') + ' sum';
 
-  const categories = ['All', ...Array.from(new Set(products.map(p => p.category)))];
-  const filtered = products.filter(p => {
-    const matchSearch = p.name.toLowerCase().includes(search.toLowerCase());
-    const matchCat = activeCategory === 'All' || p.category === activeCategory;
-    return matchSearch && matchCat && p.isActive;
-  });
+const ProductList: React.FC<ProductListProps> = ({ supplier, products, cart, onAddToCart, onViewReview, onBack, t }) => {
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [quantity, setQuantity] = useState(1);
+  const [manualQty, setManualQty] = useState('');
+  const [editingQty, setEditingQty] = useState(false);
 
-  const cartTotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0);
-  const qtyInCart = (id: string) => cart.find(i => i.id === id)?.quantity || 0;
+  const cartTotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+
+  const handleAddToCart = () => {
+    if (selectedProduct) {
+      onAddToCart(selectedProduct, quantity);
+      setSelectedProduct(null);
+      setQuantity(1);
+    }
+  };
+
+  const availableProducts = products.filter(p => p.isActive);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="animate-fadeIn relative min-h-full max-w-full overflow-x-hidden">
       {/* Header */}
-      <div className="px-4 pt-4 pb-3">
-        <div className="flex items-center space-x-3 mb-4">
-          <button onClick={onBack} className="w-9 h-9 bg-slate-800 rounded-xl flex items-center justify-center">
-            <i className="fa-solid fa-arrow-left text-slate-300 text-sm"></i>
-          </button>
-          <div>
-            <h1 className="font-black text-lg leading-tight">{supplier.name}</h1>
-            <p className="text-slate-400 text-xs">{supplier.category} · {supplier.deliveryTime}</p>
-          </div>
-        </div>
-        <div className="relative mb-3">
-          <i className="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 text-sm"></i>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search products..."
-            className="w-full bg-slate-800 border border-slate-700 rounded-2xl pl-10 pr-4 py-2.5 text-white placeholder-slate-500 focus:border-indigo-500 outline-none text-sm" />
-        </div>
-        {/* Category tabs */}
-        <div className="flex space-x-2 overflow-x-auto pb-1 scrollbar-hide">
-          {categories.map(cat => (
-            <button key={cat} onClick={() => setActiveCategory(cat)}
-              className={`flex-shrink-0 px-3 py-1.5 rounded-xl text-xs font-black uppercase transition-all ${activeCategory === cat ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}>
-              {cat}
+      <div className="p-4 bg-slate-900 border-b border-slate-800 sticky top-0 z-20">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <button onClick={onBack} className="w-10 h-10 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-center text-slate-300 shrink-0">
+              <i className="fa-solid fa-chevron-left"></i>
             </button>
-          ))}
+            <div>
+              <h2 className="text-base font-bold leading-tight">{supplier.name}</h2>
+              <p className="text-[10px] text-slate-500 font-bold">{availableProducts.length} products available</p>
+            </div>
+          </div>
+          <div className="bg-emerald-500/10 px-3 py-1.5 rounded-xl border border-emerald-500/20">
+            <span className="text-[10px] font-black text-emerald-400 uppercase">Open</span>
+          </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-2">
-        {filtered.length === 0 && (
-          <div className="text-center py-16 text-slate-500">
-            <i className="fa-solid fa-box-open text-4xl mb-3"></i>
-            <p className="font-bold">No products found</p>
-          </div>
-        )}
-        {filtered.map(p => {
-          const qty = qtyInCart(p.id);
-          const lowStock = p.stockLevel <= p.lowStockAlert;
+      {/* Products grid */}
+      <div className="p-4 grid grid-cols-2 gap-3">
+        {products.map(product => {
+          const isUnavailable  = !product.isActive || product.stockLevel === 0;
+          const isLowStock     = product.stockLevel > 0 && product.stockLevel <= product.lowStockAlert;
+          const inCart         = cart.find(i => i.id === product.id);
+
           return (
-            <div key={p.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center space-x-3">
-              <img src={p.image} alt={p.name} className="w-14 h-14 rounded-xl object-cover bg-slate-800 flex-shrink-0"
-                onError={e => { (e.target as HTMLImageElement).style.display='none'; }} />
-              <div className="flex-1 min-w-0">
-                <p className="font-bold text-sm truncate">{p.name}</p>
-                <p className="text-slate-400 text-xs mb-1">{p.category}</p>
-                <div className="flex items-center space-x-2">
-                  <p className="font-black text-indigo-400">${p.price.toFixed(2)}</p>
-                  {p.unit && <span className="text-slate-500 text-xs">/ {p.unit}</span>}
-                  {lowStock && <span className="text-amber-400 text-[10px] font-black">LOW STOCK</span>}
+            <button
+              key={product.id}
+              onClick={() => { if (!isUnavailable) { setSelectedProduct(product); setQuantity(inCart?.quantity || 1); } }}
+              disabled={isUnavailable}
+              className={`bg-slate-900/50 border rounded-3xl overflow-hidden text-left flex flex-col transition-all relative
+                ${isUnavailable ? 'opacity-50 border-slate-800 cursor-not-allowed' : 'border-slate-800 active:scale-[0.98] hover:border-indigo-500/50'}
+                ${inCart ? 'border-indigo-500/40' : ''}
+              `}
+            >
+              {/* Stock badges */}
+              {isUnavailable && (
+                <div className="absolute top-2 left-2 z-10 bg-rose-600/90 px-2 py-0.5 rounded-lg text-[8px] font-black text-white">
+                  {product.stockLevel === 0 ? 'Out of Stock' : 'Unavailable'}
+                </div>
+              )}
+              {isLowStock && !isUnavailable && (
+                <div className="absolute top-2 left-2 z-10 bg-amber-500/90 px-2 py-0.5 rounded-lg text-[8px] font-black text-white">
+                  Low Stock: {product.stockLevel}
+                </div>
+              )}
+              {inCart && !isUnavailable && (
+                <div className="absolute top-2 right-2 z-10 w-5 h-5 bg-indigo-600 rounded-full flex items-center justify-center text-[8px] font-black text-white">
+                  {inCart.quantity}
+                </div>
+              )}
+
+              {/* Image */}
+              <div className="relative aspect-square w-full bg-slate-800">
+                {product.image
+                  ? <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
+                  : <div className="w-full h-full flex items-center justify-center text-slate-600"><i className="fa-solid fa-box text-3xl"></i></div>
+                }
+                <div className="absolute bottom-2 right-2 bg-slate-950/80 backdrop-blur px-2 py-1 rounded-lg text-[10px] font-black text-white">
+                  {product.price.toLocaleString()}
                 </div>
               </div>
-              <div className="flex items-center space-x-2 flex-shrink-0">
-                {qty > 0 ? (
-                  <div className="flex items-center space-x-2">
-                    <button onClick={() => onAddToCart(p, -1)} className="w-8 h-8 bg-slate-700 rounded-lg flex items-center justify-center text-white font-black text-sm">-</button>
-                    <span className="w-6 text-center font-black text-sm">{qty}</span>
-                    <button onClick={() => onAddToCart(p, 1)} className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-black text-sm">+</button>
-                  </div>
-                ) : (
-                  <button onClick={() => onAddToCart(p, 1)} className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-white text-xs font-black transition-all">Add</button>
-                )}
+
+              <div className="p-3 space-y-1">
+                <h4 className="text-xs font-bold truncate text-slate-100">{product.name}</h4>
+                <p className="text-[10px] text-slate-500">{product.stockLevel} in stock</p>
+                <div className="pt-1 flex justify-between items-center">
+                  <span className="text-[10px] font-black text-indigo-400">
+                    {isUnavailable ? 'Unavailable' : t('add')}
+                  </span>
+                  {!isUnavailable && <i className="fa-solid fa-circle-plus text-indigo-500 text-base"></i>}
+                </div>
               </div>
-            </div>
+            </button>
           );
         })}
       </div>
 
       {/* Cart bar */}
       {cartCount > 0 && (
-        <div className="px-4 pb-4">
-          <button onClick={onViewReview} className="w-full bg-indigo-600 hover:bg-indigo-500 py-4 rounded-2xl flex items-center justify-between px-5 transition-all">
-            <span className="bg-indigo-500 text-white text-xs font-black w-6 h-6 rounded-lg flex items-center justify-center">{cartCount}</span>
-            <span className="font-black text-white">Review Order</span>
-            <span className="font-black text-white">${cartTotal.toFixed(2)}</span>
+        <div className="fixed bottom-20 left-4 right-4 z-40 animate-slideUp">
+          <button
+            onClick={onViewReview}
+            className="w-full bg-indigo-600 p-4 rounded-2xl shadow-2xl flex items-center justify-between active:scale-95 transition-all"
+          >
+            <div className="flex items-center space-x-3">
+              <div className="bg-white/20 px-2.5 py-1 rounded-lg text-xs font-black text-white">{cartCount}</div>
+              <span className="font-bold text-sm">{t('review_order')}</span>
+            </div>
+            <span className="font-black text-sm">{fmt(cartTotal)}</span>
           </button>
+        </div>
+      )}
+
+      {/* Product detail sheet */}
+      {selectedProduct && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setSelectedProduct(null)}></div>
+          <div className="relative bg-slate-900 w-full max-w-md rounded-t-[2.5rem] p-6 animate-slideUp border-t border-slate-800 shadow-2xl">
+            <div className="w-12 h-1.5 bg-slate-800 rounded-full mx-auto mb-5"></div>
+            <div className="flex items-start space-x-4 mb-5">
+              {selectedProduct.image
+                ? <img src={selectedProduct.image} className="w-20 h-20 rounded-2xl object-cover shadow-lg shrink-0" alt="" />
+                : <div className="w-20 h-20 bg-slate-800 rounded-2xl flex items-center justify-center text-slate-500 shrink-0"><i className="fa-solid fa-box text-2xl"></i></div>
+              }
+              <div className="flex-1 min-w-0">
+                <h3 className="text-lg font-bold truncate">{selectedProduct.name}</h3>
+                <p className="text-xl font-black text-indigo-400 mt-1">{selectedProduct.price.toLocaleString()} sum</p>
+                <p className="text-[10px] text-slate-500 mt-0.5">{selectedProduct.stockLevel} available</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{t('quantity')}</label>
+                <div className="flex items-center space-x-3">
+                  <button onClick={() => setQuantity(q => Math.max(1, q - 1))} className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center font-bold text-slate-300">−</button>
+
+                  {/* Tap to type quantity */}
+                  {editingQty ? (
+                    <input
+                      type="number"
+                      value={manualQty}
+                      autoFocus
+                      onChange={e => setManualQty(e.target.value)}
+                      onBlur={() => {
+                        const n = parseInt(manualQty);
+                        if (n > 0 && n <= selectedProduct.stockLevel) setQuantity(n);
+                        setEditingQty(false);
+                      }}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          const n = parseInt(manualQty);
+                          if (n > 0 && n <= selectedProduct.stockLevel) setQuantity(n);
+                          setEditingQty(false);
+                        }
+                      }}
+                      className="w-16 text-center bg-slate-700 border border-indigo-500 rounded-xl text-lg font-black text-white outline-none py-2"
+                    />
+                  ) : (
+                    <button
+                      onClick={() => { setManualQty(String(quantity)); setEditingQty(true); }}
+                      className="w-12 text-center text-xl font-black text-white hover:text-indigo-400 transition-colors"
+                    >
+                      {quantity}
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => setQuantity(q => Math.min(selectedProduct.stockLevel, q + 1))}
+                    className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center font-bold text-indigo-400"
+                  >+</button>
+                </div>
+              </div>
+
+              <p className="text-center text-[10px] text-slate-500">Total: <span className="font-black text-white">{fmt(selectedProduct.price * quantity)}</span></p>
+
+              <button
+                onClick={handleAddToCart}
+                className="w-full bg-indigo-600 h-14 rounded-2xl font-black text-base flex items-center justify-center shadow-xl active:scale-95 transition-all"
+              >
+                {t('add')} to Cart · {fmt(selectedProduct.price * quantity)}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

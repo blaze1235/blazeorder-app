@@ -1,64 +1,97 @@
+
 import React, { useState } from 'react';
 import { WorkingHours } from '../types';
+import Drawer from '../components/Drawer';
 
-interface Props {
+interface WorkingHoursScreenProps {
   hours: WorkingHours[];
   onUpdateHours: (hours: WorkingHours[]) => void;
   onBack: () => void;
 }
 
-const WorkingHoursScreen: React.FC<Props> = ({ hours, onUpdateHours, onBack }) => {
-  const [local, setLocal] = useState<WorkingHours[]>(hours);
+const WorkingHoursScreen: React.FC<WorkingHoursScreenProps> = ({ hours, onUpdateHours, onBack }) => {
+  const [editingDay, setEditingDay] = useState<WorkingHours | null>(null);
 
-  const toggle = (i: number) => {
-    const updated = local.map((h, idx) => idx === i ? { ...h, isOpen: !h.isOpen } : h);
-    setLocal(updated);
+  const toggleDay = (day: string) => {
+    onUpdateHours(hours.map(h => h.day === day ? {...h, isOpen: !h.isOpen} : h));
   };
 
-  const update = (i: number, field: 'open' | 'close', val: string) => {
-    const updated = local.map((h, idx) => idx === i ? { ...h, [field]: val } : h);
-    setLocal(updated);
+  const handleUpdateTimes = (open: string, close: string) => {
+    if (editingDay) {
+      onUpdateHours(hours.map(h => h.day === editingDay.day ? { ...h, open, close } : h));
+      setEditingDay(null);
+    }
   };
-
-  const handleSave = () => { onUpdateHours(local); onBack(); };
 
   return (
-    <div className="p-4 space-y-4 animate-fadeIn pb-24">
-      <div className="flex items-center space-x-3">
-        <button onClick={onBack} className="w-9 h-9 bg-slate-800 rounded-xl flex items-center justify-center">
-          <i className="fa-solid fa-arrow-left text-slate-300 text-sm"></i>
+    <div className="animate-fadeIn p-6 space-y-6 pb-24 md:px-12 w-full max-w-4xl mx-auto">
+      <div className="flex items-center space-x-4">
+        <button onClick={onBack} className="w-10 h-10 bg-slate-900 border border-slate-800 rounded-xl flex items-center justify-center text-slate-300">
+          <i className="fa-solid fa-chevron-left"></i>
         </button>
-        <h1 className="text-xl font-black">Working Hours</h1>
+        <h2 className="text-xl font-black">Working Hours</h2>
       </div>
-      <div className="space-y-2">
-        {local.map((h, i) => (
-          <div key={h.day} className={`bg-slate-900 border rounded-2xl p-4 transition-all ${h.isOpen ? 'border-slate-800' : 'border-slate-800 opacity-60'}`}>
-            <div className="flex items-center justify-between mb-3">
-              <p className="font-black">{h.day}</p>
-              <button onClick={() => toggle(i)}
-                className={`w-10 h-6 rounded-full transition-all relative ${h.isOpen ? 'bg-indigo-600' : 'bg-slate-600'}`}>
-                <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${h.isOpen ? 'left-4' : 'left-0.5'}`}></span>
-              </button>
-            </div>
-            {h.isOpen && (
-              <div className="flex space-x-3">
-                <div className="flex-1">
-                  <p className="text-[10px] font-black text-slate-500 uppercase mb-1">Open</p>
-                  <input type="time" value={h.open} onChange={e => update(i, 'open', e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-2 py-2 text-white text-sm outline-none focus:border-indigo-500" />
+
+      <div className="bg-amber-500/10 border border-amber-500/20 p-5 rounded-3xl text-xs text-amber-400 font-medium">
+        Orders cannot be placed by buyers during closed hours. Click a day to edit opening/closing times.
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {hours.map(h => (
+          <div key={h.day} className={`bg-slate-900 border p-5 rounded-[2.5rem] flex items-center justify-between transition-all ${h.isOpen ? 'border-slate-800' : 'border-rose-500/20 opacity-60'}`}>
+             <button 
+                onClick={() => setEditingDay(h)}
+                className="flex items-center space-x-4 flex-1 text-left"
+             >
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${h.isOpen ? 'bg-indigo-500/10 text-indigo-400' : 'bg-slate-800 text-slate-600'}`}>
+                   <i className="fa-solid fa-clock"></i>
                 </div>
-                <div className="flex-1">
-                  <p className="text-[10px] font-black text-slate-500 uppercase mb-1">Close</p>
-                  <input type="time" value={h.close} onChange={e => update(i, 'close', e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-2 py-2 text-white text-sm outline-none focus:border-indigo-500" />
+                <div>
+                   <p className="font-bold text-sm text-slate-100">{h.day}</p>
+                   <p className="text-[10px] text-slate-500 font-black uppercase tracking-wider">{h.open} - {h.close}</p>
                 </div>
-              </div>
-            )}
-            {!h.isOpen && <p className="text-slate-600 text-sm">Closed</p>}
+             </button>
+             <button onClick={() => toggleDay(h.day)} className={`w-12 h-6 rounded-full relative transition-colors ${h.isOpen ? 'bg-emerald-600' : 'bg-slate-800'}`}>
+                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${h.isOpen ? 'right-1' : 'left-1'}`}></div>
+             </button>
           </div>
         ))}
       </div>
-      <button onClick={handleSave} className="w-full bg-indigo-600 hover:bg-indigo-500 py-4 rounded-2xl text-white font-black text-sm uppercase">Save Hours</button>
+
+      <Drawer isOpen={!!editingDay} onClose={() => setEditingDay(null)} title={`Edit ${editingDay?.day} Hours`}>
+         <div className="space-y-6">
+            <div className="grid grid-cols-2 gap-4">
+               <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Open Time</label>
+                  <input 
+                    type="time" 
+                    defaultValue={editingDay?.open}
+                    id="openTimeInput"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-2xl py-4 px-6 text-sm text-white focus:border-indigo-500 outline-none"
+                  />
+               </div>
+               <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Close Time</label>
+                  <input 
+                    type="time" 
+                    defaultValue={editingDay?.close}
+                    id="closeTimeInput"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-2xl py-4 px-6 text-sm text-white focus:border-indigo-500 outline-none"
+                  />
+               </div>
+            </div>
+            <button 
+               onClick={() => {
+                  const o = (document.getElementById('openTimeInput') as HTMLInputElement).value;
+                  const c = (document.getElementById('closeTimeInput') as HTMLInputElement).value;
+                  handleUpdateTimes(o, c);
+               }}
+               className="w-full bg-indigo-600 py-4 rounded-2xl text-xs font-black text-white uppercase shadow-xl"
+            >
+               Save Schedule
+            </button>
+         </div>
+      </Drawer>
     </div>
   );
 };

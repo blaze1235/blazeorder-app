@@ -1,60 +1,78 @@
+
 import React from 'react';
 import { AppNotification, UserRole } from '../types';
 
-interface Props {
+interface NotificationsScreenProps {
   notifications: AppNotification[];
-  t: (k: string) => string;
+  t: (key: string) => string;
   role: UserRole;
   onClear: () => void;
   onMarkRead: (id: string) => void;
 }
 
-const typeStyle: Record<string, string> = {
-  info: 'text-blue-400 bg-blue-400/10',
-  success: 'text-emerald-400 bg-emerald-400/10',
-  warning: 'text-amber-400 bg-amber-400/10',
-  error: 'text-rose-400 bg-rose-400/10',
-};
-const typeIcon: Record<string, string> = {
-  info: 'fa-circle-info',
-  success: 'fa-circle-check',
-  warning: 'fa-triangle-exclamation',
-  error: 'fa-circle-xmark',
-};
+const NotificationsScreen: React.FC<NotificationsScreenProps> = ({ notifications, t, role, onClear, onMarkRead }) => {
+  const filteredNotifs = notifications.filter(n => {
+    if (!n.roleTarget) return true;
+    return n.roleTarget.includes(role);
+  });
 
-const NotificationsScreen: React.FC<Props> = ({ notifications, onClear, onMarkRead }) => {
+  const getIcon = (type: string) => {
+    switch (type) {
+      case 'success': return 'fa-circle-check text-emerald-400';
+      case 'warning': return 'fa-circle-exclamation text-amber-400';
+      case 'error': return 'fa-circle-xmark text-rose-400';
+      default: return 'fa-circle-info text-indigo-400';
+    }
+  };
+
   return (
-    <div className="p-4 space-y-4 animate-fadeIn pb-24">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-black">Alerts</h1>
-        {notifications.length > 0 && (
-          <button onClick={onClear} className="text-slate-400 text-xs font-black hover:text-rose-400 transition-colors">Clear All</button>
-        )}
+    <div className="animate-fadeIn p-6 space-y-6 pb-24 md:px-12 w-full max-w-4xl mx-auto">
+      <div className="flex justify-between items-center">
+        <div>
+           <h2 className="text-2xl font-black">{t('notifications')}</h2>
+           <p className="text-xs text-slate-500 font-medium">Activity and system alerts</p>
+        </div>
+        <button 
+          onClick={onClear} 
+          className="text-[10px] font-black text-rose-400 uppercase tracking-widest border border-rose-500/20 px-3 py-1.5 rounded-xl hover:bg-rose-500/10 transition-all"
+        >
+          Clear All
+        </button>
       </div>
 
-      {notifications.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-20 space-y-3">
-          <div className="w-16 h-16 bg-slate-800 rounded-3xl flex items-center justify-center">
-            <i className="fa-solid fa-bell-slash text-slate-600 text-2xl"></i>
+      <div className="space-y-3">
+        {filteredNotifs.length > 0 ? filteredNotifs.map((notif) => (
+          <div 
+            key={notif.id} 
+            onClick={() => onMarkRead(notif.id)}
+            className={`p-5 rounded-3xl border flex items-start space-x-4 transition-all cursor-pointer ${notif.isRead ? 'bg-slate-900/40 border-slate-800/60' : 'bg-slate-900 border-indigo-500/30 shadow-lg shadow-indigo-600/5'}`}
+          >
+             <div className="mt-1">
+               <i className={`fa-solid ${getIcon(notif.type)} text-lg`}></i>
+             </div>
+             <div className="flex-1 min-w-0">
+               <div className="flex justify-between items-center mb-1">
+                 <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">
+                   {new Date(notif.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                 </p>
+                 {!notif.isRead && <span className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></span>}
+               </div>
+               <p className={`text-sm leading-relaxed ${notif.isRead ? 'text-slate-400' : 'text-slate-100 font-medium'}`}>
+                 {notif.message}
+               </p>
+               {notif.orderId && (
+                 <p className="text-[10px] font-black text-indigo-400 uppercase mt-2">
+                   Order Ref: {notif.orderId}
+                 </p>
+               )}
+             </div>
           </div>
-          <p className="text-slate-500 font-bold">No notifications</p>
-        </div>
-      )}
-
-      <div className="space-y-2">
-        {notifications.map(n => (
-          <button key={n.id} onClick={() => onMarkRead(n.id)}
-            className={`w-full bg-slate-900 border rounded-2xl p-4 flex items-start space-x-3 text-left transition-all ${n.isRead ? 'border-slate-800' : 'border-indigo-500/30'}`}>
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${typeStyle[n.type]}`}>
-              <i className={`fa-solid ${typeIcon[n.type]} text-sm`}></i>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className={`text-sm font-bold ${n.isRead ? 'text-slate-300' : 'text-white'}`}>{n.message}</p>
-              <p className="text-slate-500 text-xs mt-0.5">{new Date(n.createdAt).toLocaleString()}</p>
-            </div>
-            {!n.isRead && <div className="w-2 h-2 rounded-full bg-indigo-500 mt-1 flex-shrink-0"></div>}
-          </button>
-        ))}
+        )) : (
+          <div className="py-24 text-center opacity-20 flex flex-col items-center">
+            <i className="fa-solid fa-bell-slash text-6xl mb-4"></i>
+            <p className="font-bold">No new notifications</p>
+          </div>
+        )}
       </div>
     </div>
   );

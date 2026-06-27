@@ -1,88 +1,170 @@
 import React, { useState } from 'react';
 import { Order, UserRole } from '../types';
+import ProgressBar from '../components/ProgressBar';
 
-interface Props {
+interface MyOrdersProps {
   orders: Order[];
-  onViewDetails: (o: Order) => void;
-  onReorder: (o: Order) => void;
+  onViewDetails: (order: Order) => void;
+  onReorder: (order: Order) => void;
   onCreateOrder: () => void;
-  t: (k: string) => string;
+  t: (key: string) => string;
   onUpdateStatus: (id: string, status: Order['status']) => void;
   role: UserRole;
-  currentUserId?: string;
+  currentUserId?: string; // chat_id or buyerName to filter client's own orders
 }
 
-const statusConfig: Record<string, { label: string; color: string; icon: string }> = {
-  pending:   { label: 'Pending',    color: 'text-amber-400 bg-amber-400/10 border-amber-400/20',   icon: 'fa-clock' },
-  accepted:  { label: 'Accepted',   color: 'text-blue-400 bg-blue-400/10 border-blue-400/20',       icon: 'fa-check' },
-  picked_up: { label: 'On the way', color: 'text-purple-400 bg-purple-400/10 border-purple-400/20', icon: 'fa-truck' },
-  completed: { label: 'Delivered',  color: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20', icon: 'fa-circle-check' },
-  cancelled: { label: 'Cancelled',  color: 'text-rose-400 bg-rose-400/10 border-rose-400/20',       icon: 'fa-xmark' },
-};
+const MyOrders: React.FC<MyOrdersProps> = ({
+  orders, onViewDetails, onReorder, onCreateOrder, t, onUpdateStatus, role, currentUserId
+}) => {
+  const [activeTab, setActiveTab] = useState<'active' | 'completed'>('active');
 
-const tabs = ['All', 'Active', 'Completed', 'Cancelled'];
+  // Clients only see their own orders; staff/distributor see all
+  const myOrders = (role === 'buyer' && currentUserId)
+    ? orders.filter(o => o.clientChatId === currentUserId || o.buyerName === currentUserId)
+    : orders;
 
-const MyOrders: React.FC<Props> = ({ orders, onViewDetails, onReorder, onCreateOrder }) => {
-  const [tab, setTab] = useState('All');
+  // Newest first
+  const sorted = [...myOrders].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  const filtered = orders.filter(o => {
-    if (tab === 'Active') return ['pending', 'accepted', 'picked_up'].includes(o.status);
-    if (tab === 'Completed') return o.status === 'completed';
-    if (tab === 'Cancelled') return o.status === 'cancelled';
-    return true;
+  const filteredOrders = sorted.filter(o =>
+    activeTab === 'active'
+      ? !['completed', 'cancelled'].includes(o.status)
+      : ['completed', 'cancelled'].includes(o.status)
+  );
+
+  // Group orders by sessionId so multi-supplier checkout shows as one session
+  const groupedBySession: Record<string, Order[]> = {};
+  const sessionKeyOrder: string[] = [];
+  filteredOrders.forEach(o => {
+    const key = o.sessionId || o.id;
+    if (!groupedBySession[key]) { groupedBySession[key] = []; sessionKeyOrder.push(key); }
+    groupedBySession[key].push(o);
   });
 
+  const getStatusStyle = (status: string) => {
+    switch (status) {
+      case 'completed':  return 'bg-emerald-500/10 text-emerald-400';
+      case 'pending':    return 'bg-amber-500/10 text-amber-400';
+      case 'accepted': case 'preparing': case 'ready': return 'bg-indigo-500/10 text-indigo-400';
+      case 'delivered': case 'picked_up': return 'bg-blue-500/10 text-blue-400';
+      case 'cancelled':  return 'bg-rose-500/10 text-rose-400';
+      default:           return 'bg-slate-500/10 text-slate-400';
+    }
+  };
+
+  // For a session group, pick the "worst" status to show overall
+  const sessionStatus = (group: Order[]): Order['status'] => {
+    const priority = ['cancelled','pending','accepted','preparing','ready','picked_up','delivered','completed'];
+    return group.reduce<Order['status']>((worst, o) => {
+      return priority.indexOf(o.status) < priority.indexOf(worst) ? o.status : worst;
+    }, group[0].status);
+  };
+
+  const sessionTotal = (group: Order[]) => group.reduce((s, o) => s + o.total, 0);
+
   return (
-    <div className="flex flex-col h-full">
-      <div className="px-4 pt-4 pb-3">
-        <h1 className="text-xl font-black mb-4">My Orders</h1>
-        <div className="flex space-x-2 overflow-x-auto pb-1 scrollbar-hide">
-          {tabs.map(t => (
-            <button key={t} onClick={() => setTab(t)}
-              className={`flex-shrink-0 px-3 py-1.5 rounded-xl text-xs font-black uppercase transition-all ${tab === t ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400'}`}>
-              {t}
-            </button>
-          ))}
-        </div>
+    <div className="animate-fadeIn p-4 space-y-5 pb-24 w-full max-w-full overflow-x-hidden">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold">{t('orders')}</h2>
+        {role === 'buyer' && (
+          <button
+            onClick={onCreateOrder}
+            className="bg-indigo-600 px-4 py-2 rounded-xl text-xs font-black uppercase transition-all active:scale-95 shadow-lg shadow-indigo-600/20"
+          >
+            <i className="fa-solid fa-plus mr-2"></i>{t('new_order')}
+          </button>
+        )}
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-2">
-        {filtered.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-16 space-y-4">
-            <div className="w-16 h-16 bg-slate-800 rounded-3xl flex items-center justify-center">
-              <i className="fa-solid fa-box-open text-slate-600 text-2xl"></i>
-            </div>
-            <p className="text-slate-500 font-bold">No orders yet</p>
-            <button onClick={onCreateOrder} className="bg-indigo-600 hover:bg-indigo-500 px-6 py-3 rounded-2xl text-white font-black text-sm uppercase">
-              Place First Order
-            </button>
+      <div className="bg-slate-900 p-1 rounded-2xl flex border border-slate-800">
+        <button
+          onClick={() => setActiveTab('active')}
+          className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'active' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500'}`}
+        >{t('active_order')}</button>
+        <button
+          onClick={() => setActiveTab('completed')}
+          className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'completed' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500'}`}
+        >{t('history')}</button>
+      </div>
+
+      <div className="space-y-4">
+        {Object.keys(groupedBySession).length === 0 ? (
+          <div className="py-20 text-center opacity-40">
+            <i className="fa-solid fa-box-open text-5xl mb-4"></i>
+            <p className="font-bold">No orders found</p>
           </div>
-        )}
-        {filtered.map(o => {
-          const cfg = statusConfig[o.status] || statusConfig.pending;
+        ) : sessionKeyOrder.map((sessionKey) => {
+          const group = groupedBySession[sessionKey];
+          const isMulti = group.length > 1;
+          const overallStatus = sessionStatus(group);
+          const total = sessionTotal(group);
           return (
-            <button key={o.id} onClick={() => onViewDetails(o)} className="w-full bg-slate-900 border border-slate-800 hover:border-indigo-500/30 rounded-2xl p-4 text-left transition-all">
-              <div className="flex items-start justify-between mb-2">
-                <div>
-                  <p className="font-black text-sm">{o.id}</p>
-                  <p className="text-slate-400 text-xs">{o.supplierName}</p>
+            <div key={sessionKey} className="bg-slate-900/50 border border-slate-800 rounded-3xl overflow-hidden">
+              {/* Session header */}
+              {isMulti && (
+                <div className="px-5 pt-4 pb-2 flex justify-between items-center border-b border-slate-800/50">
+                  <div>
+                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Combined Order</p>
+                    <p className="text-xs font-bold text-slate-300 mt-0.5">{group[0].date}</p>
+                  </div>
+                  <div className="text-right">
+                    <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${getStatusStyle(overallStatus)}`}>
+                      {t(`status_${overallStatus}`)}
+                    </span>
+                    <p className="text-base font-black text-slate-100 mt-1">{total.toLocaleString('uz-UZ') + ' sum'}</p>
+                  </div>
                 </div>
-                <span className={`text-[10px] font-black px-2 py-1 rounded-full border ${cfg.color}`}>
-                  <i className={`fa-solid ${cfg.icon} mr-1`}></i>{cfg.label}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <p className="text-slate-400 text-xs">{o.items.length} item{o.items.length !== 1 ? 's' : ''} · {o.date?.split('T')[0]}</p>
-                <div className="flex items-center space-x-2">
-                  <p className="font-black text-indigo-400">${o.total.toFixed(2)}</p>
-                  {o.status === 'completed' && (
-                    <button onClick={e => { e.stopPropagation(); onReorder(o); }} className="text-[10px] font-black text-slate-400 bg-slate-800 px-2 py-1 rounded-lg">
-                      Reorder
+              )}
+
+              {/* Each supplier's sub-order */}
+              {group.map((order, idx) => (
+                <div
+                  key={order.id}
+                  onClick={() => onViewDetails(order)}
+                  className={`p-5 cursor-pointer hover:bg-slate-800/30 active:bg-slate-800/50 transition-all ${isMulti && idx < group.length - 1 ? 'border-b border-slate-800/50' : ''}`}
+                >
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center text-indigo-400">
+                        <i className="fa-solid fa-store text-sm"></i>
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-slate-100 text-sm">{order.supplierName}</h4>
+                        <p className="text-[10px] text-slate-500 font-bold uppercase">{order.id}</p>
+                      </div>
+                    </div>
+                    <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${getStatusStyle(order.status)}`}>
+                      {t(`status_${order.status}`)}
+                    </span>
+                  </div>
+
+                  {/* Items preview */}
+                  <p className="text-[11px] text-slate-400 mb-3 line-clamp-1">
+                    {order.items.map(i => `${i.quantity}× ${i.name}`).join(', ')}
+                  </p>
+
+                  {!['completed','cancelled'].includes(order.status) && (
+                    <div className="mb-3">
+                      <ProgressBar status={order.status} compact />
+                    </div>
+                  )}
+
+                  <div className="flex justify-between items-center">
+                    <p className="text-xs text-slate-500">{order.items.length} {t('items')}</p>
+                    <p className="text-base font-black text-indigo-400">{order.total.toLocaleString('uz-UZ') + ' sum'}</p>
+                  </div>
+
+                  {order.status === 'picked_up' && role === 'buyer' && (
+                    <button
+                      onClick={e => { e.stopPropagation(); onUpdateStatus(order.id, 'completed'); }}
+                      className="mt-3 w-full bg-emerald-600 py-3 rounded-2xl text-xs font-black uppercase text-white shadow-lg hover:bg-emerald-500 transition-colors"
+                    >
+                      {t('confirm_delivery')} — {order.supplierName}
                     </button>
                   )}
                 </div>
-              </div>
-            </button>
+              ))}
+            </div>
           );
         })}
       </div>
